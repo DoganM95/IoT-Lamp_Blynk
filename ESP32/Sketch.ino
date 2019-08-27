@@ -11,12 +11,10 @@
 const int leftLight = 16;
 const int rightLight = 17;
 
-    // setting PWM properties
-    const int LightsPwmFreq =
-        40000;  // the higher the frequency, the less flickering
-const int LightsPwmChannel = 0;  // pwm channel of light pins
-const int LightsPwmResolution =
-    10;  // 10 Bit = 0-1024 (2^10) as Range for Duty Cycle
+// setting PWM properties
+const int LightsPwmFreq = 40000;     // higher frequency -> less flickering
+const int LightsPwmChannel = 0;      // pwm channel of light pins
+const int LightsPwmResolution = 10;  // 10 Bit = 0-1024 (2^10) for Duty Cycle
 
 WiFiClient wifiClient;
 PubSubClient client;
