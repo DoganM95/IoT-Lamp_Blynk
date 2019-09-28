@@ -118,3 +118,5 @@ void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
 //   }
 // }
 // }
+
+// TODO: eventually needs a fix for pwm at 1% brightness (still too bright?!)
