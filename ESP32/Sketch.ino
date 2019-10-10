@@ -120,3 +120,8 @@ void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
 // }
 
 // TODO: eventually needs a fix for pwm at 1% brightness (still too bright?!)
+
+//TODO: sace last light state in eeprom to recover from reboot
+
+//TODO: reconnect on wifi loss eventually in seperate thread
+
