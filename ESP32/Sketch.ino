@@ -61,25 +61,14 @@ void setup() {
   client.setClient(wifiClient);
   client.setServer(GBRIDGE_MQTT_SERVER, GBRIDGE_MQTT_PORT);
   client.setCallback(mqttSubscribtionHandler);
-  while (!client.connected()) {  // wait until connected to mqtt server
-    Serial.println("Connecting via MQTT...");
-    if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
-      Serial.println("Connected to GBridge");
-    } else {
-      Serial.println("Failed with state ");
-      Serial.println(client.state());
-      delay(2000);
-    }
-  }
+  reconnectWifi();
   client.subscribe(onoff_get);
   client.subscribe(brightness_get);
 }
 
 void loop() {
+  reconnectWifi();
   client.loop();  // necessary to receive messages
-  if (!client.connected()) {
-    // TODO: Reconnect via function
-  }
 }
 
 void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
@@ -104,6 +93,19 @@ void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
     digitalWrite(rightLightEnable, HIGH);
     ledcWrite(0, round((1024.0 / 100) * value));  // Writes to the whole channel, so both lights get adjusted
     client.publish(brightness_set, responseToPublish);
+  }
+}
+
+void reconnectWifi() {
+  while (!client.connected()) {  // wait until connected to mqtt server
+    Serial.println("Connecting via MQTT...");
+    if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
+      Serial.println("Connected to GBridge");
+    } else {
+      Serial.println("Failed with state ");
+      Serial.println(client.state());
+      delay(2000);
+    }
   }
 }
 
