@@ -1,2 +1,2 @@
-# IKEA-Omlopp-Light---ESP32
+# IKEA-Omlopp-Light
 Ikea Light Controller with connection to Google Home using GBridge
