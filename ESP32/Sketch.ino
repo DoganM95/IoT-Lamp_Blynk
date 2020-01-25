@@ -5,6 +5,7 @@
 #include <WiFiClient.h>
 //--- C
 #include <math.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -18,20 +19,27 @@
 
 // GPIO pins
 const int rightLightPWM = 16;
+const int leftLightPWM = 19;
 const int rightLightEnable = 17;
 const int leftLightEnable = 18;
-const int leftLightPWM = 19;
 
 // setting PWM properties
 const int lightsPwmFrequency = 40000;  // higher frequency -> less flickering
 const int lightsPwmChannel = 0;        // pwm channel of light pins
 const int lightsPwmResolution = 10;    // 10 Bit = 0-1024 (2^10) for Duty Cycle
 
+// Connectivity
 WiFiClient wifiClient;
 PubSubClient client;
 
+// Threads
+pthread_t wifiConnectivityThread;
+pthread_t mqttMessagingThread;
+
 // Function Declarations:
 void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length);
+void* connectionKeeper(void* param);
+void* mqttMessager(void* param);
 
 // SETUP
 void setup() {
@@ -48,63 +56,89 @@ void setup() {
   // Initial light (50% Brightness) when turning on
   ledcWrite(lightsPwmChannel, 1024 / 4);
 
-  // Wifi Setup
-  Serial.println("Waiting for Wifi.");
-  WiFi.begin(WIFI_SSID, WIFI_PW);
-  // Wait until wifi is connected. If multiple Wifi AP's should be searched,
-  // consider an array and a loop with a timeout
-  while (WiFi.status() != WL_CONNECTED) {
-  }
-  Serial.printf("Connected to Wifi: %s\n", WiFi.SSID());
-
   // MQTT Setup
   client.setClient(wifiClient);
   client.setServer(GBRIDGE_MQTT_SERVER, GBRIDGE_MQTT_PORT);
   client.setCallback(mqttSubscribtionHandler);
-  reconnectWifi();
+
+  // Thread Creations
+  if (pthread_create(&wifiConnectivityThread, NULL, connectionKeeper, NULL) == 0) {
+    Serial.println("Thread wifi-Watchdog successfully started");
+  }
+
+  // MQTT actions after wifi connection
   client.subscribe(onoff_get);
   client.subscribe(brightness_get);
-}
-
-void loop() {
-  reconnectWifi();
-  client.loop();  // necessary to receive messages
-}
-
-void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
-  int previousValue = (ledcRead(0) / 1024) * 100;
-  int value;
-  int valueDifference;  // Fidd between old and new value, used for fading
-  char responseToPublish[4];
-
-  sprintf(responseToPublish, "%d", value);
-  payload[length] = '\0';
-  value = atol((char*)payload);
-  Serial.printf("Topic: %s\n", topic);
-  Serial.printf("Message: %d", value);
-  Serial.println("-----------------------");
-
-  if (strcmp(topic, onoff_get) == 0) {
-    digitalWrite(leftLightEnable, value);
-    digitalWrite(rightLightEnable, value);
-    client.publish(onoff_set, responseToPublish);
-  } else if (strcmp(topic, brightness_get) == 0) {
-    digitalWrite(leftLightEnable, HIGH);
-    digitalWrite(rightLightEnable, HIGH);
-    ledcWrite(0, round((1024.0 / 100) * value));  // Writes to the whole channel, so both lights get adjusted
-    client.publish(brightness_set, responseToPublish);
+  if (pthread_create(&mqttMessagingThread, NULL, mqttMessager, NULL) == 0) {  // necessary to receive messages
+    Serial.println("Thread mqtt communication successfully started");
   }
 }
 
-void reconnectWifi() {
-  while (!client.connected()) {  // wait until connected to mqtt server
-    Serial.println("Connecting via MQTT...");
-    if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
-      Serial.println("Connected to GBridge");
-    } else {
-      Serial.println("Failed with state ");
-      Serial.println(client.state());
-      delay(2000);
+void loop() {
+  // client.loop();  // necessary to receive messages (runs in its own thread now, see mqttMessager)
+}
+
+void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
+  if (client.connected()) {
+    int previousValue = (ledcRead(0) / 1024) * 100;
+    int value;
+    int valueDifference;  // Fidd between old and new value, used for fading
+    char responseToPublish[4];
+
+    sprintf(responseToPublish, "%d", value);
+    payload[length] = '\0';
+    value = atol((char*)payload);
+    Serial.printf("Topic: %s\n", topic);
+    Serial.printf("Message: %d", value);
+    Serial.println("-----------------------");
+
+    if (strcmp(topic, onoff_get) == 0) {
+      digitalWrite(leftLightEnable, value);
+      digitalWrite(rightLightEnable, value);
+      client.publish(onoff_set, responseToPublish);
+    } else if (strcmp(topic, brightness_get) == 0) {
+      digitalWrite(leftLightEnable, HIGH);
+      digitalWrite(rightLightEnable, HIGH);
+      ledcWrite(0, round((1024.0 / 100) * value));  // Writes to the whole channel, so both lights get adjusted
+      client.publish(brightness_set, responseToPublish);
+    }
+  }
+}
+
+// Threaded Functions
+
+void* connectionKeeper(void* param) {
+  while (true) {
+    // Connecting to Wifi
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("Connecting to Wifi...");
+      WiFi.disconnect();
+      WiFi.mode(WIFI_OFF);
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(WIFI_SSID, WIFI_PW);
+      while (WiFi.status() != WL_CONNECTED) {
+      }
+      Serial.printf("Connected to Wifi: %s\n", WiFi.SSID());
+    }
+
+    // Connecting to MQTT Server
+    if (!client.connected()) {
+      Serial.println("Connecting via MQTT...");
+      if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
+        Serial.println("Connected to GBridge");
+      } else {
+        Serial.println("Failed with state ");
+        Serial.println(client.state());
+        delay(2000);
+      }
+    }
+  }
+}
+
+void* mqttMessager(void* param) {
+  while (true) {
+    if (client.connected()) {
+      client.loop();
     }
   }
 }
