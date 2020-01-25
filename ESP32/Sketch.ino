@@ -6,8 +6,10 @@
 //--- C
 #include <math.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 // Credentials
@@ -33,15 +35,23 @@ WiFiClient wifiClient;
 PubSubClient client;
 
 // Threads
-pthread_t wifiConnectivityThread;
+pthread_t connectivityThread;
 pthread_t mqttMessagingThread;
+
+int counter;
+bool initialConnectionEstablished = false;
 
 // Function Declarations:
 void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length);
 void* connectionKeeper(void* param);
 void* mqttMessager(void* param);
+void WifiConnector();
+void MqttConnector();
 
+// ----------------------------------------------------------------------------
 // SETUP
+// ----------------------------------------------------------------------------
+
 void setup() {
   // Serial Setup
   Serial.begin(115200);
@@ -59,18 +69,15 @@ void setup() {
   // MQTT Setup
   client.setClient(wifiClient);
   client.setServer(GBRIDGE_MQTT_SERVER, GBRIDGE_MQTT_PORT);
-  client.setCallback(mqttSubscribtionHandler);
+  client.setCallback(&mqttSubscribtionHandler);
 
   // Thread Creations
-  if (pthread_create(&wifiConnectivityThread, NULL, connectionKeeper, NULL) == 0) {
-    Serial.println("Thread wifi-Watchdog successfully started");
+  if (pthread_create(&connectivityThread, NULL, connectionKeeper, NULL) == 0) {
+    Serial.printf("Thread Connection Keeper successfully started\n");
   }
 
-  // MQTT actions after wifi connection
-  client.subscribe(onoff_get);
-  client.subscribe(brightness_get);
   if (pthread_create(&mqttMessagingThread, NULL, mqttMessager, NULL) == 0) {  // necessary to receive messages
-    Serial.println("Thread mqtt communication successfully started");
+    Serial.print("Thread mqtt communication successfully started\n");
   }
 }
 
@@ -78,7 +85,49 @@ void loop() {
   // client.loop();  // necessary to receive messages (runs in its own thread now, see mqttMessager)
 }
 
+// ----------------------------------------------------------------------------
+// FUNCTIONS
+// ----------------------------------------------------------------------------
+
+void WifiConnector() {
+  // Connecting to Wifi
+  counter = 0;
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.printf("Connecting to Wifi: %s\n", WIFI_SSID);
+    WiFi.disconnect();
+    WiFi.mode(WIFI_OFF);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PW);
+    while (WiFi.status() != WL_CONNECTED && counter <= 5) {
+      Serial.printf("Wifi Connection Try: %d\n", counter++);
+      delay(1000);
+    }
+    if (counter > 5 && WiFi.status() != WL_CONNECTED) {
+      Serial.printf("Failed to connect to Wifi: %s\n", WIFI_SSID);
+    } else {
+      Serial.printf("Connected to Wifi: %s\n", WIFI_SSID);
+    }
+  }
+}
+
+void MqttConnector() {
+  // Connecting to MQTT Server
+  if (!client.connected()) {
+    Serial.printf("Connecting to GBridge via MQTT...\n");
+    if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
+      // MQTT actions after wifi connection
+      client.subscribe(onoff_get);
+      client.subscribe(brightness_get);
+      Serial.printf("Connected and configured GBridge: %s, %s\n", GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME);
+    } else {
+      Serial.println("Failed with state ");
+      Serial.println(client.state());
+    }
+  }
+}
+
 void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
+  Serial.printf("mqttSubscriptionHandler is running now..\n");
   if (client.connected()) {
     int previousValue = (ledcRead(0) / 1024) * 100;
     int value;
@@ -88,8 +137,9 @@ void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
     sprintf(responseToPublish, "%d", value);
     payload[length] = '\0';
     value = atol((char*)payload);
+    Serial.println("-----------------------");
     Serial.printf("Topic: %s\n", topic);
-    Serial.printf("Message: %d", value);
+    Serial.printf("Message: %d\n", value);
     Serial.println("-----------------------");
 
     if (strcmp(topic, onoff_get) == 0) {
@@ -105,39 +155,32 @@ void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+// ----------------------------------------------------------------------------
 // Threaded Functions
+// ----------------------------------------------------------------------------
 
 void* connectionKeeper(void* param) {
   while (true) {
     // Connecting to Wifi
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("Connecting to Wifi...");
-      WiFi.disconnect();
-      WiFi.mode(WIFI_OFF);
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(WIFI_SSID, WIFI_PW);
-      while (WiFi.status() != WL_CONNECTED) {
-      }
-      Serial.printf("Connected to Wifi: %s\n", WiFi.SSID());
-    }
+    WifiConnector();
 
     // Connecting to MQTT Server
-    if (!client.connected()) {
-      Serial.println("Connecting via MQTT...");
-      if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
-        Serial.println("Connected to GBridge");
-      } else {
-        Serial.println("Failed with state ");
-        Serial.println(client.state());
-        delay(2000);
-      }
-    }
+    MqttConnector();
+
+    initialConnectionEstablished = true;  // Thread joining workaround to start mqttMessager() only after a successfull connection
+    delay(1000);                          // To check only every second
   }
 }
 
 void* mqttMessager(void* param) {
   while (true) {
-    if (client.connected()) {
+    while (initialConnectionEstablished == false) {
+      Serial.printf("Thread MqttMessager is waiting for connection..\n");
+      delay(1000);
+    }
+    Serial.printf("Client looping now..\n");
+    while (initialConnectionEstablished == true) {
+      // while (true) {
       client.loop();
     }
   }
