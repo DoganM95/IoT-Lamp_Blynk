@@ -3,6 +3,6 @@
 - ESP32
 - L298N motor controller board
 
-### Components being replaced
+### Components replaced
 - IKEA OMLOPP Power Supply & RF Receiver
 - Remote Control (2.4GHz RF Transmitter)
