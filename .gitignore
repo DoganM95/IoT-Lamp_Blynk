@@ -1,6 +1,5 @@
-*/Credentials/*
-!*/Credentials/*_example.h
-*/Configuration/*
-!*/Configuration/*_example.h
-
 .vscode/
+/**/Credentials/*
+!/**/Credentials/*_example.h
+/**/Configuration/*
+!/**/Configuration/*_example.h
