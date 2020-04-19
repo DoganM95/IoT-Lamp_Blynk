@@ -183,6 +183,7 @@ void* mqttMessager(void* param) {
       // while (true) {
       client.loop();
     }
+
   }
 }
 
@@ -197,5 +198,6 @@ void* mqttMessager(void* param) {
 //   }
 // }
 // }
+
 
 // TODO: eventually needs a fix for pwm at 1% brightness (still too bright?!)
