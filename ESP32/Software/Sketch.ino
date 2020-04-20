@@ -63,9 +63,8 @@ void setup() {
   pinMode(leftLightEnable, OUTPUT);
   pinMode(rightLightEnable, OUTPUT);
 
-  ledcWrite(lightsPwmChannel, 1024 / 4);  // Initial Brightness = 50% when turning on
-  // digitalWrite(leftLightEnable, HIGH);    // Turn left light on
-  // digitalWrite(rightLightEnable, HIGH);   // Turn right light on
+  // Initial light (50% Brightness) when turning on
+  ledcWrite(lightsPwmChannel, 1024 / 4);
 
   // MQTT Setup
   client.setClient(wifiClient);
