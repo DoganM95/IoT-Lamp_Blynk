@@ -1,201 +1,192 @@
-// Libraries
-//--- ESP32
-#include <PubSubClient.h>
-#include <WiFi.h>
-#include <WiFiClient.h>
-//--- C
-#include <math.h>
-#include <pthread.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
-
 // Credentials
-#include "./Credentials/GBridge.h"
+#include "./Credentials/Blynk.h"
 #include "./Credentials/Wifi.h"
 
-// Configuration
-#include "./Configuration/GBridge.h"
+// Libraries
+#include <BlynkSimpleEsp32.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <math.h>
+#include <pthread.h>
 
 // GPIO pins
-const int rightLightPWM = 16;
-const int leftLightPWM = 19;
-const int rightLightEnable = 17;
-const int leftLightEnable = 18;
+const unsigned short int rightLightPWM = 19;
+const unsigned short int leftLightPWM = 16;
+const unsigned short int rightLightEnable = 18;
+const unsigned short int leftLightEnable = 17;
 
 // setting PWM properties
-const int lightsPwmFrequency = 40000;  // higher frequency -> less flickering
-const int lightsPwmChannel = 0;        // pwm channel of light pins
-const int lightsPwmResolution = 10;    // 10 Bit = 0-1024 (2^10) for Duty Cycle
+const unsigned short int leftLightPwmChannel = 3;
+const unsigned short int rightLightPwmChannel = 6;
+const unsigned short int lightsPwmFrequency = 40000;  // higher frequency -> less flickering
+const unsigned short int lightsPwmResolution = 10;    // 10 Bit = 1024 (2^10) for Duty Cycle (0 to 1023)
 
-// Connectivity
-WiFiClient wifiClient;
-PubSubClient client;
-
-// Threads
-pthread_t connectivityThread;
-pthread_t mqttMessagingThread;
-
-int counter;
-bool initialConnectionEstablished = false;
-
-// Function Declarations:
-void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length);
-void* connectionKeeper(void* param);
-void* mqttMessager(void* param);
-void WifiConnector();
-void MqttConnector();
+// Object State
+int leftLightState = 1;
+int rightLightState = 1;
+int leftLightBrightness = 512;
+int rightLightBrightness = 512;
 
 // ----------------------------------------------------------------------------
 // SETUP
 // ----------------------------------------------------------------------------
 
 void setup() {
-  // Serial Setup
   Serial.begin(115200);
 
-  // GPIO Setup
-  ledcSetup(lightsPwmChannel, lightsPwmFrequency, lightsPwmResolution);
-  ledcAttachPin(leftLightPWM, lightsPwmChannel);
-  ledcAttachPin(rightLightPWM, lightsPwmChannel);
-  pinMode(leftLightEnable, OUTPUT);
-  pinMode(rightLightEnable, OUTPUT);
-
-  // Initial light (50% Brightness) when turning on
-  ledcWrite(lightsPwmChannel, 1024 / 4);
-
-  // MQTT Setup
-  client.setClient(wifiClient);
-  client.setServer(GBRIDGE_MQTT_SERVER, GBRIDGE_MQTT_PORT);
-  client.setCallback(&mqttSubscribtionHandler);
-
-  // Thread Creations
-  if (pthread_create(&connectivityThread, NULL, connectionKeeper, NULL) == 0) {
-    Serial.printf("Thread Connection Keeper successfully started\n");
-  }
-
-  if (pthread_create(&mqttMessagingThread, NULL, mqttMessager, NULL) == 0) {  // necessary to receive messages
-    Serial.print("Thread mqtt communication successfully started\n");
-  }
+  ConnectToWifi(WIFI_SSID, WIFI_PW);
+  if (BLYNK_USE_LOCAL_SERVER)
+    Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW, BLYNK_SERVER, BLYNK_PORT);
+  else
+    Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW);
+  SetupGpio(leftLightEnable, rightLightEnable, leftLightPWM, rightLightPWM, leftLightPwmChannel, rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
+  initializeOnBoot();
 }
 
-void loop() {
-  // client.loop();  // necessary to receive messages (runs in its own thread now, see mqttMessager)
-}
+// ----------------------------------------------------------------------------
+// MAIN LOOP
+// ----------------------------------------------------------------------------
+
+void loop() { Blynk.run(); }
 
 // ----------------------------------------------------------------------------
 // FUNCTIONS
 // ----------------------------------------------------------------------------
 
-void WifiConnector() {
-  // Connecting to Wifi
-  counter = 0;
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.printf("Connecting to Wifi: %s\n", WIFI_SSID);
+// Blynk Functions
+
+BLYNK_CONNECTED() {  // Restore hardware pins according to current UI config
+  Blynk.syncAll();
+}
+
+BLYNK_WRITE(V1) {  // Both lights state
+  int pinValue = param.asInt();
+  leftLightState = pinValue;
+  rightLightState = pinValue;
+  Serial.printf("Pin V1 changed to: %d\n", pinValue);
+  digitalWrite(leftLightEnable, pinValue == 0 ? LOW : HIGH);
+  digitalWrite(rightLightEnable, pinValue == 0 ? LOW : HIGH);
+  Blynk.virtualWrite(V3, pinValue == 0 ? 0 : 1);
+  Blynk.virtualWrite(V5, pinValue == 0 ? 0 : 1);
+}
+
+BLYNK_WRITE(V2) {  // Both lights brightness (slider)
+  int pinValue = param.asInt();
+  leftLightBrightness = pinValue;
+  rightLightBrightness = pinValue;
+  Serial.printf("Pin V2 changed to: %d\n", pinValue);
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V4, pinValue);
+  Blynk.virtualWrite(V6, pinValue);
+  Blynk.virtualWrite(V7, pinValue);
+  Blynk.virtualWrite(V8, pinValue);
+  Blynk.virtualWrite(V9, pinValue);
+}
+
+BLYNK_WRITE(V7) {  // Both lights brightness (stepper)
+  int pinValue = param.asInt();
+  leftLightBrightness = pinValue;
+  rightLightBrightness = pinValue;
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V2, pinValue);
+  Blynk.virtualWrite(V4, pinValue);
+  Blynk.virtualWrite(V6, pinValue);
+  Blynk.virtualWrite(V8, pinValue);
+  Blynk.virtualWrite(V9, pinValue);
+}
+
+BLYNK_WRITE(V3) {  //  Left light state
+  int pinValue = param.asInt();
+  leftLightState = pinValue;
+  digitalWrite(leftLightEnable, pinValue == 0 ? LOW : HIGH);
+  Blynk.virtualWrite(V1, rightLightState == 0 ? 0 : 1);
+  if (pinValue == 0) Blynk.virtualWrite(V1, 0);
+}
+
+BLYNK_WRITE(V4) {  // Left light brightness (slider)
+  int pinValue = param.asInt();
+  leftLightBrightness = pinValue;
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V8, pinValue);
+}
+
+BLYNK_WRITE(V8) {  // Left light brightness (stepper)
+  int pinValue = param.asInt();
+  leftLightState = pinValue;
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V4, pinValue);
+}
+
+BLYNK_WRITE(V5) {  // Right light state
+  int pinValue = param.asInt();
+  rightLightState = pinValue;
+  digitalWrite(rightLightEnable, pinValue == 0 ? LOW : HIGH);
+  Blynk.virtualWrite(V1, leftLightState == 0 ? 0 : 1);
+  if (pinValue == 0) Blynk.virtualWrite(V1, 0);
+}
+
+BLYNK_WRITE(V6) {  // Right light brightness (slider)
+  int pinValue = param.asInt();
+  rightLightBrightness = pinValue;
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V9, pinValue);
+}
+
+BLYNK_WRITE(V9) {  // Right light brightness (stepper)
+  int pinValue = param.asInt();
+  rightLightState = pinValue;
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V6, pinValue);
+}
+
+// General functions
+
+void WaitForWifi(int cycleDelayInMilliSeconds) {
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(cycleDelayInMilliSeconds);
+  }
+}
+
+void WaitForBlynk(int cycleDelayInMilliSeconds) {
+  while (!Blynk.connected()) {
+    delay(cycleDelayInMilliSeconds);
+  }
+}
+
+void ConnectToWifi(char* ssid, char* pass) {
+  Serial.printf("Connecting to Wifi: %s\n", ssid);
+  try {
+    WiFi.begin(ssid, pass);
     WiFi.disconnect();
-    WiFi.mode(WIFI_OFF);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PW);
-    while (WiFi.status() != WL_CONNECTED && counter <= 5) {
-      Serial.printf("Wifi Connection Try: %d\n", counter++);
-      delay(1000);
-    }
-    if (counter > 5 && WiFi.status() != WL_CONNECTED) {
-      Serial.printf("Failed to connect to Wifi: %s\n", WIFI_SSID);
-    } else {
-      Serial.printf("Connected to Wifi: %s\n", WIFI_SSID);
-    }
+    WiFi.begin(ssid, pass);
+    WaitForWifi(1000);
+  } catch (const std::exception& e) {
+    Serial.printf("Error occured: %s\n", e.what());
   }
+  Serial.printf("Connected to Wifi: %s\n", ssid);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
 }
 
-void MqttConnector() {
-  // Connecting to MQTT Server
-  if (!client.connected()) {
-    Serial.printf("Connecting to GBridge via MQTT...\n");
-    if (client.connect(GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME, GBRIDGE_MQTT_PASSWORD)) {
-      // MQTT actions after wifi connection
-      client.subscribe(onoff_get);
-      client.subscribe(brightness_get);
-      Serial.printf("Connected and configured GBridge: %s, %s\n", GBRIDGE_MQTT_CLIENTID, GBRIDGE_MQTT_USERNAME);
-    } else {
-      Serial.println("Failed with state ");
-      Serial.println(client.state());
-    }
-  }
+void SetupGpio(unsigned short int leftLightEnablePin, unsigned short int rightLightEnablePin, unsigned short int leftLightPwmPin, unsigned short int rightLightPwmPin,
+               unsigned short int leftLightPwmChannel, unsigned short int rightLightPwmChannel, unsigned short int lightsPwmFrequency, unsigned short int lightsPwmResolution) {
+  // GPIO Setup
+  ledcSetup(leftLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
+  ledcSetup(rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
+  ledcAttachPin(leftLightPwmPin, leftLightPwmChannel);
+  ledcAttachPin(rightLightPwmPin, rightLightPwmChannel);
+  pinMode(leftLightEnablePin, OUTPUT);
+  pinMode(rightLightEnablePin, OUTPUT);
 }
 
-void mqttSubscribtionHandler(char* topic, byte* payload, unsigned int length) {
-  Serial.printf("mqttSubscriptionHandler is running now..\n");
-  if (client.connected()) {
-    int previousValue = (ledcRead(0) / 1024) * 100;
-    int value;
-    int valueDifference;  // Fidd between old and new value, used for fading
-    char responseToPublish[4];
-
-    sprintf(responseToPublish, "%d", value);
-    payload[length] = '\0';
-    value = atol((char*)payload);
-    Serial.println("-----------------------");
-    Serial.printf("Topic: %s\n", topic);
-    Serial.printf("Message: %d\n", value);
-    Serial.println("-----------------------");
-
-    if (strcmp(topic, onoff_get) == 0) {
-      digitalWrite(leftLightEnable, value);
-      digitalWrite(rightLightEnable, value);
-      client.publish(onoff_set, responseToPublish);
-    } else if (strcmp(topic, brightness_get) == 0) {
-      digitalWrite(leftLightEnable, HIGH);
-      digitalWrite(rightLightEnable, HIGH);
-      ledcWrite(0, round((1024.0 / 100) * value));  // Writes to the whole channel, so both lights get adjusted
-      client.publish(brightness_set, responseToPublish);
-    }
-  }
+void initializeOnBoot() {
+  // Turn light on initially with 50% brightness
+  ledcWrite(leftLightPwmChannel, percentToValue(50, 1023));
+  ledcWrite(rightLightPwmChannel, percentToValue(50, 1023));
+  digitalWrite(rightLightEnable, HIGH);
+  digitalWrite(leftLightEnable, HIGH);
 }
 
-// ----------------------------------------------------------------------------
-// Threaded Functions
-// ----------------------------------------------------------------------------
-
-void* connectionKeeper(void* param) {
-  while (true) {
-    // Connecting to Wifi
-    WifiConnector();
-
-    // Connecting to MQTT Server
-    MqttConnector();
-
-    initialConnectionEstablished = true;  // Thread joining workaround to start mqttMessager() only after a successfull connection
-    delay(1000);                          // To check only every second
-  }
-}
-
-void* mqttMessager(void* param) {
-  while (true) {
-    while (initialConnectionEstablished == false) {
-      Serial.printf("Thread MqttMessager is waiting for connection..\n");
-      delay(1000);
-    }
-    Serial.printf("Client looping now..\n");
-    while (initialConnectionEstablished == true) {
-      // while (true) {
-      client.loop();
-    }
-  }
-}
-
-// TODO: implement fading function
-// PARAMS: old brightness, new brightness, fading duration
-// PROTO:
-// valueDifference = abs(value - previousValue);
-
-// if (previousValue > value) {
-//   for (double fader = previousValue; round(fader) >= value; (double)fader -= (double)valueDifference/100) {
-//     usleep();
-//   }
-// }
-// }
-
-// TODO: eventually needs a fix for pwm at 1% brightness (still too bright?!)
+int percentToValue(int percent, int maxValue) { return 0 <= percent <= 100 ? round((maxValue / 100) * percent) : 1023; }
