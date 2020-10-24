@@ -67,7 +67,6 @@ BLYNK_WRITE(V1) {  // Both lights state
   int pinValue = param.asInt();
   leftLightState = pinValue;
   rightLightState = pinValue;
-  Serial.printf("Pin V1 changed to: %d\n", pinValue);
   digitalWrite(leftLightEnable, pinValue == 0 ? LOW : HIGH);
   digitalWrite(rightLightEnable, pinValue == 0 ? LOW : HIGH);
   Blynk.virtualWrite(V3, pinValue == 0 ? 0 : 1);
@@ -78,7 +77,6 @@ BLYNK_WRITE(V2) {  // Both lights brightness (slider)
   int pinValue = param.asInt();
   leftLightBrightness = pinValue;
   rightLightBrightness = pinValue;
-  Serial.printf("Pin V2 changed to: %d\n", pinValue);
   ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
   ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
   Blynk.virtualWrite(V4, pinValue);
@@ -165,6 +163,7 @@ void ConnectToWifi(char* ssid, char* pass) {
     WiFi.begin(ssid, pass);
     WiFi.disconnect();
     WiFi.begin(ssid, pass);
+    WiFi.setHostname("Desklight (ESP32, Blynk)");
     WaitForWifi(1000);
   } catch (const std::exception& e) {
     Serial.printf("Error occured: %s\n", e.what());
