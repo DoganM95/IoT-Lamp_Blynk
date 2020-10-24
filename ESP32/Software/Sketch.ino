@@ -2,6 +2,9 @@
 #include "./Credentials/Blynk.h"
 #include "./Credentials/Wifi.h"
 
+// Configurations
+#include "./Configuration/Blynk.h"
+
 // Libraries
 #include <BlynkSimpleEsp32.h>
 #include <WiFi.h>
