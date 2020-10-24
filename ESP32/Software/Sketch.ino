@@ -34,13 +34,14 @@ int rightLightBrightness = 512;
 void setup() {
   Serial.begin(115200);
 
+  SetupGpio(leftLightEnable, rightLightEnable, leftLightPWM, rightLightPWM, leftLightPwmChannel, rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
+  initializeOnBoot();
+
   ConnectToWifi(WIFI_SSID, WIFI_PW);
   if (BLYNK_USE_LOCAL_SERVER)
     Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW, BLYNK_SERVER, BLYNK_PORT);
   else
     Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW);
-  SetupGpio(leftLightEnable, rightLightEnable, leftLightPWM, rightLightPWM, leftLightPwmChannel, rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
-  initializeOnBoot();
 }
 
 // ----------------------------------------------------------------------------
