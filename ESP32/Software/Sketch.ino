@@ -51,7 +51,7 @@ void setup() {
 
 void loop() {
   ConnectToWifi(WIFI_SSID, WIFI_PW);
-  ConnectToBlynk(BLYNK_LOCAL_SERVER_USAGE);
+  ConnectToBlynk();
   UpdateIpAddressInBlynk();
   UpdateMacAddressInBlynk();
   Blynk.run();
@@ -179,9 +179,9 @@ void ConnectToWifi(char* ssid, char* pass) {
   }
 }
 
-void ConnectToBlynk(bool useLocalServer) {
+void ConnectToBlynk() {
   if (!Blynk.connected()) {
-    if (useLocalServer)
+    if (BLYNK_LOCAL_SERVER_USAGE)
       Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW, BLYNK_SERVER, BLYNK_PORT);
     else
       Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW);
