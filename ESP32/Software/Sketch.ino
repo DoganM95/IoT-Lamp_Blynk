@@ -38,10 +38,7 @@ void setup() {
   Serial.begin(115200);
 
   SetupGpio(leftLightEnable, rightLightEnable, leftLightPWM, rightLightPWM, leftLightPwmChannel, rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
-  initializeOnBoot();
-
-  ConnectToWifi(WIFI_SSID, WIFI_PW);
-  ConnectToBlynk(BLYNK_LOCAL_SERVER_USAGE);
+  setInitialStateOfLights();
 }
 
 // ----------------------------------------------------------------------------
@@ -197,7 +194,7 @@ void SetupGpio(unsigned short int leftLightEnablePin, unsigned short int rightLi
   pinMode(rightLightEnablePin, OUTPUT);
 }
 
-void initializeOnBoot() {
+void setInitialStateOfLights() {
   // Turn light on initially with 50% brightness
   ledcWrite(leftLightPwmChannel, percentToValue(50, 1023));
   ledcWrite(rightLightPwmChannel, percentToValue(50, 1023));
