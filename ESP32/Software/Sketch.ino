@@ -30,6 +30,10 @@ int rightLightState = 1;
 int leftLightBrightness = 512;
 int rightLightBrightness = 512;
 
+// Connection State
+String IpAddress = "";
+String MacAddress = "";
+
 // ----------------------------------------------------------------------------
 // SETUP
 // ----------------------------------------------------------------------------
@@ -48,6 +52,8 @@ void setup() {
 void loop() {
   ConnectToWifi(WIFI_SSID, WIFI_PW);
   ConnectToBlynk(BLYNK_LOCAL_SERVER_USAGE);
+  UpdateIpAddressInBlynk();
+  UpdateMacAddressInBlynk();
   Blynk.run();
 }
 
@@ -180,6 +186,20 @@ void ConnectToBlynk(bool useLocalServer) {
     else
       Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW);
     WaitForBlynk(1000);
+  }
+}
+
+void UpdateIpAddressInBlynk() {
+  if (IpAddress != WiFi.localIP().toString()) {
+    IpAddress = WiFi.localIP().toString();
+    Blynk.virtualWrite(V10, IpAddress);
+  }
+}
+
+void UpdateMacAddressInBlynk() {
+  if (MacAddress != WiFi.macAddress()) {
+    MacAddress = WiFi.macAddress();
+    Blynk.virtualWrite(V11, MacAddress);
   }
 }
 
