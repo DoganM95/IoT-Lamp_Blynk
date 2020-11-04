@@ -41,17 +41,18 @@ void setup() {
   initializeOnBoot();
 
   ConnectToWifi(WIFI_SSID, WIFI_PW);
-  if (BLYNK_USE_LOCAL_SERVER)
-    Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW, BLYNK_SERVER, BLYNK_PORT);
-  else
-    Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW);
+  ConnectToBlynk(BLYNK_LOCAL_SERVER_USAGE);
 }
 
 // ----------------------------------------------------------------------------
 // MAIN LOOP
 // ----------------------------------------------------------------------------
 
-void loop() { Blynk.run(); }
+void loop() {
+  ConnectToWifi(WIFI_SSID, WIFI_PW);
+  ConnectToBlynk(BLYNK_LOCAL_SERVER_USAGE);
+  Blynk.run();
+}
 
 // ----------------------------------------------------------------------------
 // FUNCTIONS
@@ -158,19 +159,31 @@ void WaitForBlynk(int cycleDelayInMilliSeconds) {
 }
 
 void ConnectToWifi(char* ssid, char* pass) {
-  Serial.printf("Connecting to Wifi: %s\n", ssid);
-  try {
-    WiFi.begin(ssid, pass);
-    WiFi.disconnect();
-    WiFi.begin(ssid, pass);
-    WiFi.setHostname("Desklight (ESP32, Blynk)");
-    WaitForWifi(1000);
-  } catch (const std::exception& e) {
-    Serial.printf("Error occured: %s\n", e.what());
+  if (!WiFi.isConnected()) {
+    Serial.printf("Connecting to Wifi: %s\n", ssid);
+    try {
+      WiFi.begin(ssid, pass);
+      WiFi.disconnect();
+      WiFi.begin(ssid, pass);
+      WiFi.setHostname("Desklight (ESP32, Blynk)");
+      WaitForWifi(1000);
+    } catch (const std::exception& e) {
+      Serial.printf("Error occured: %s\n", e.what());
+    }
+    Serial.printf("Connected to Wifi: %s\n", ssid);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
   }
-  Serial.printf("Connected to Wifi: %s\n", ssid);
-  WiFi.setAutoReconnect(true);
-  WiFi.persistent(true);
+}
+
+void ConnectToBlynk(bool useLocalServer) {
+  if (!Blynk.connected()) {
+    if (useLocalServer)
+      Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW, BLYNK_SERVER, BLYNK_PORT);
+    else
+      Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PW);
+    WaitForBlynk(1000);
+  }
 }
 
 void SetupGpio(unsigned short int leftLightEnablePin, unsigned short int rightLightEnablePin, unsigned short int leftLightPwmPin, unsigned short int rightLightPwmPin,
