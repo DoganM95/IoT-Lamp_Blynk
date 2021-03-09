@@ -122,126 +122,127 @@ BLYNK_WRITE(V1) {  // Both lights state
   Blynk.virtualWrite(V3, pinValue == 0 ? 0 : 1);
   Blynk.virtualWrite(V5, pinValue == 0 ? 0 : 1);
   Blynk.syncVirtual(V3, V5);
+}
 
-  BLYNK_WRITE(V3) {  //  Left light state
-    int pinValue = param.asInt();
-    leftLightState = pinValue;  // Model
-    digitalWrite(leftLightEnable, pinValue == 0 ? LOW : HIGH);
-    Blynk.virtualWrite(V1, leftLightState == 1 || rightLightState == 1 ? 1 : 0);
+BLYNK_WRITE(V3) {  //  Left light state
+  int pinValue = param.asInt();
+  leftLightState = pinValue;  // Model
+  digitalWrite(leftLightEnable, pinValue == 0 ? LOW : HIGH);
+  Blynk.virtualWrite(V1, leftLightState == 1 || rightLightState == 1 ? 1 : 0);
+}
+
+BLYNK_WRITE(V5) {  // Right light state
+  int pinValue = param.asInt();
+  rightLightState = pinValue;  // Model
+  digitalWrite(rightLightEnable, pinValue == 0 ? LOW : HIGH);
+  Blynk.virtualWrite(V1, leftLightState == 1 || rightLightState == 1 ? 1 : 0);
+}
+
+// Brightness Sliders --------------------------------------------------
+
+BLYNK_WRITE(V2) {  // Both lights brightness (slider)
+  int pinValue = param.asInt();
+
+  mainLightsBrightness = pinValue;  // Model
+  leftLightBrightness = pinValue;   // Model
+  rightLightBrightness = pinValue;  // Model
+
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+
+  xTaskCreatePinnedToCore(virtualPinTwoToAllUpdater, "v1SliderUpdaterTask", 1000000, NULL, 0, &xTaskMainBrightnessHandle, 1);
+
+  // mainBrightnessLastWriteTime = esp_timer_get_time / 1000LL;
+  // vTaskResume(xTaskMainBrightnessHandle);
+}
+
+BLYNK_WRITE(V4) {  // Left light brightness (slider)
+  int pinValue = param.asInt();
+  leftLightBrightness = pinValue;  // Model
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V8, pinValue);
+}
+
+BLYNK_WRITE(V6) {  // Right light brightness (slider)
+  int pinValue = param.asInt();
+  rightLightBrightness = pinValue;  // Model
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V9, pinValue);
+}
+
+// Brightness Steppers --------------------------------------------------
+
+BLYNK_WRITE(V7) {  // Both lights brightness (stepper)
+  int pinValue = param.asInt();
+  leftLightBrightness = pinValue;
+  rightLightBrightness = pinValue;
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+
+  Blynk.virtualWrite(V2, pinValue);
+  Blynk.virtualWrite(V4, pinValue);
+  Blynk.virtualWrite(V6, pinValue);
+  Blynk.virtualWrite(V8, pinValue);
+  Blynk.virtualWrite(V9, pinValue);
+}
+
+BLYNK_WRITE(V8) {  // Left light brightness (stepper)
+  int pinValue = param.asInt();
+  leftLightState = pinValue;
+  ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V4, pinValue);
+}
+
+BLYNK_WRITE(V9) {  // Right light brightness (stepper)
+  int pinValue = param.asInt();
+  rightLightState = pinValue;
+  ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
+  Blynk.virtualWrite(V6, pinValue);
+}
+
+// General functions
+
+void WaitForWifi(int cycleDelayInMilliSeconds) {
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(cycleDelayInMilliSeconds);
   }
+}
 
-  BLYNK_WRITE(V5) {  // Right light state
-    int pinValue = param.asInt();
-    rightLightState = pinValue;  // Model
-    digitalWrite(rightLightEnable, pinValue == 0 ? LOW : HIGH);
-    Blynk.virtualWrite(V1, leftLightState == 1 || rightLightState == 1 ? 1 : 0);
+void WaitForBlynk(int cycleDelayInMilliSeconds) {
+  while (!Blynk.connected()) {
+    delay(cycleDelayInMilliSeconds);
   }
+}
 
-  // Brightness Sliders --------------------------------------------------
-
-  BLYNK_WRITE(V2) {  // Both lights brightness (slider)
-    int pinValue = param.asInt();
-
-    mainLightsBrightness = pinValue;  // Model
-    leftLightBrightness = pinValue;   // Model
-    rightLightBrightness = pinValue;  // Model
-
-    ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
-    ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
-
-    xTaskCreatePinnedToCore(virtualPinTwoToAllUpdater, "v1SliderUpdaterTask", 1000000, NULL, 0, &xTaskMainBrightnessHandle, 1);
-
-    // mainBrightnessLastWriteTime = esp_timer_get_time / 1000LL;
-    // vTaskResume(xTaskMainBrightnessHandle);
+void ConnectToWifi(const char* ssid, const char* pass) {
+  Serial.printf("Connecting to Wifi: %s\n", ssid);
+  try {
+    // WiFi.begin(ssid, pass);
+    WiFi.disconnect();
+    WiFi.begin(ssid, pass);
+    WaitForWifi(1000);
+  } catch (const std::exception& e) {
+    Serial.printf("Error occured: %s\n", e.what());
   }
+}
 
-  BLYNK_WRITE(V4) {  // Left light brightness (slider)
-    int pinValue = param.asInt();
-    leftLightBrightness = pinValue;  // Model
-    ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
-    Blynk.virtualWrite(V8, pinValue);
-  }
+void SetupGpio(unsigned short int leftLightEnablePin, unsigned short int rightLightEnablePin, unsigned short int leftLightPwmPin, unsigned short int rightLightPwmPin,
+               unsigned short int leftLightPwmChannel, unsigned short int rightLightPwmChannel, unsigned short int lightsPwmFrequency, unsigned short int lightsPwmResolution) {
+  // GPIO Setup
+  ledcSetup(leftLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
+  ledcSetup(rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
+  ledcAttachPin(leftLightPwmPin, leftLightPwmChannel);
+  ledcAttachPin(rightLightPwmPin, rightLightPwmChannel);
+  pinMode(leftLightEnablePin, OUTPUT);
+  pinMode(rightLightEnablePin, OUTPUT);
+}
 
-  BLYNK_WRITE(V6) {  // Right light brightness (slider)
-    int pinValue = param.asInt();
-    rightLightBrightness = pinValue;  // Model
-    ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
-    Blynk.virtualWrite(V9, pinValue);
-  }
+void setInitialStateOfLights() {
+  // Turn light on initially with 50% brightness
+  ledcWrite(leftLightPwmChannel, percentToValue(50, 1023));
+  ledcWrite(rightLightPwmChannel, percentToValue(50, 1023));
+  digitalWrite(rightLightEnable, HIGH);
+  digitalWrite(leftLightEnable, HIGH);
+}
 
-  // Brightness Steppers --------------------------------------------------
-
-  BLYNK_WRITE(V7) {  // Both lights brightness (stepper)
-    int pinValue = param.asInt();
-    leftLightBrightness = pinValue;
-    rightLightBrightness = pinValue;
-    ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
-    ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
-
-    Blynk.virtualWrite(V2, pinValue);
-    Blynk.virtualWrite(V4, pinValue);
-    Blynk.virtualWrite(V6, pinValue);
-    Blynk.virtualWrite(V8, pinValue);
-    Blynk.virtualWrite(V9, pinValue);
-  }
-
-  BLYNK_WRITE(V8) {  // Left light brightness (stepper)
-    int pinValue = param.asInt();
-    leftLightState = pinValue;
-    ledcWrite(leftLightPwmChannel, percentToValue(pinValue, 1023));
-    Blynk.virtualWrite(V4, pinValue);
-  }
-
-  BLYNK_WRITE(V9) {  // Right light brightness (stepper)
-    int pinValue = param.asInt();
-    rightLightState = pinValue;
-    ledcWrite(rightLightPwmChannel, percentToValue(pinValue, 1023));
-    Blynk.virtualWrite(V6, pinValue);
-  }
-
-  // General functions
-
-  void WaitForWifi(int cycleDelayInMilliSeconds) {
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(cycleDelayInMilliSeconds);
-    }
-  }
-
-  void WaitForBlynk(int cycleDelayInMilliSeconds) {
-    while (!Blynk.connected()) {
-      delay(cycleDelayInMilliSeconds);
-    }
-  }
-
-  void ConnectToWifi(const char* ssid, const char* pass) {
-    Serial.printf("Connecting to Wifi: %s\n", ssid);
-    try {
-      // WiFi.begin(ssid, pass);
-      WiFi.disconnect();
-      WiFi.begin(ssid, pass);
-      WaitForWifi(1000);
-    } catch (const std::exception& e) {
-      Serial.printf("Error occured: %s\n", e.what());
-    }
-  }
-
-  void SetupGpio(unsigned short int leftLightEnablePin, unsigned short int rightLightEnablePin, unsigned short int leftLightPwmPin, unsigned short int rightLightPwmPin,
-                 unsigned short int leftLightPwmChannel, unsigned short int rightLightPwmChannel, unsigned short int lightsPwmFrequency, unsigned short int lightsPwmResolution) {
-    // GPIO Setup
-    ledcSetup(leftLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
-    ledcSetup(rightLightPwmChannel, lightsPwmFrequency, lightsPwmResolution);
-    ledcAttachPin(leftLightPwmPin, leftLightPwmChannel);
-    ledcAttachPin(rightLightPwmPin, rightLightPwmChannel);
-    pinMode(leftLightEnablePin, OUTPUT);
-    pinMode(rightLightEnablePin, OUTPUT);
-  }
-
-  void setInitialStateOfLights() {
-    // Turn light on initially with 50% brightness
-    ledcWrite(leftLightPwmChannel, percentToValue(50, 1023));
-    ledcWrite(rightLightPwmChannel, percentToValue(50, 1023));
-    digitalWrite(rightLightEnable, HIGH);
-    digitalWrite(leftLightEnable, HIGH);
-  }
-
-  int percentToValue(int percent, int maxValue) { return 0 <= percent <= 100 ? round((maxValue / 100) * percent) : 1023; }
+int percentToValue(int percent, int maxValue) { return 0 <= percent <= 100 ? round((maxValue / 100) * percent) : 1023; }
