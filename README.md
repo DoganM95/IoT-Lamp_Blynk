@@ -19,6 +19,3 @@
 
 ### Software to control the system
 - Blynk (App for Android/IOS)
-
-### Frameworks used in this system (listeners)
-- Blynk 
