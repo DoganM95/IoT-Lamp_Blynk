@@ -1,5 +1,10 @@
 ### Setup
-1. Setup Blynk Server (e.g. Docker container) && Client (e.g. Smartphone), see Blynk docs
+If local Blynk server should be used (for infinite energy):  
+- Setup Blynk Server (e.g. Docker container) && Client (e.g. Smartphone), see Blynk docs  
+
+If blynk cloud should be used (may be pricey)  
+- Register an account at blynk to use its credentials  
+
 2. Clone this repo
 3. Edit all `<Something>_example.h` files to contain real credentials
 4. Remove the `_example` suffix of said files
