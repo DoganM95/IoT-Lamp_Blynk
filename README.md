@@ -1,10 +1,10 @@
 ### Setup
-- Clone this repo
-- Edit all `<Something>_example.h` files to contain real credentials
-- Remove the `_example` suffix of said files
-- Upload the sketch to ESP32
-- Setup Blynk Server (e.g. Docker container) && Client (e.g. Smartphone), see Blynk docs
-- Control the lights using blynk client
+1. Clone this repo
+2. Edit all `<Something>_example.h` files to contain real credentials
+3. Remove the `_example` suffix of said files
+4. Upload the sketch to ESP32
+5. Setup Blynk Server (e.g. Docker container) && Client (e.g. Smartphone), see Blynk docs
+6. Control the lights using blynk client
 
 ### Physical components of this system
 - IKEA OMLOPP LED spotlight (24 Volt DC LED Lamp), can be any light, but needs voltage adjustment (see Hardware sketch)
