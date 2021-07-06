@@ -1,9 +1,9 @@
 ### Setup
-1. Clone this repo
-2. Edit all `<Something>_example.h` files to contain real credentials
-3. Remove the `_example` suffix of said files
-4. Upload the sketch to ESP32
-5. Setup Blynk Server (e.g. Docker container) && Client (e.g. Smartphone), see Blynk docs
+1. Setup Blynk Server (e.g. Docker container) && Client (e.g. Smartphone), see Blynk docs
+2. Clone this repo
+3. Edit all `<Something>_example.h` files to contain real credentials
+4. Remove the `_example` suffix of said files
+5. Upload the sketch to ESP32
 6. Control the lights using blynk client
 
 ### Physical components of this system
